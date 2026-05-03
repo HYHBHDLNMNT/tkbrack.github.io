@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>TKB Lý Nhân - Màu Sắc & Ngày Tháng</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        body { font-family: "Times New Roman", Times, serif; background: #f0f2f5; padding: 20px; text-align: center; }
+        .container { max-width: 1100px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .upload-box { border: 2px dashed #007bff; padding: 25px; margin-bottom: 20px; cursor: pointer; background: #f8fbff; }
+        .list-lop { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 20px; }
+        .btn-lop { padding: 7px 15px; cursor: pointer; border: 1px solid #007bff; background: white; border-radius: 5px; color: #007bff; font-weight: bold; transition: 0.2s; }
+        .btn-lop:hover { background: #007bff; color: white; }
+
+        /* Định dạng Bảng TKB để chụp ảnh */
+        #photo-zone { padding: 30px; background: white; display: inline-block; border: 1px solid #ddd; }
+        .main-title { font-size: 30px; font-weight: bold; margin-bottom: 5px; }
+        .sub-title { font-size: 18px; margin-bottom: 20px; color: #333; }
+        
+        table.mau-tkb { border-collapse: collapse; width: 100%; border: 2px solid black; }
+        table.mau-tkb th, table.mau-tkb td { border: 1px solid black; padding: 10px; text-align: center; font-weight: bold; }
+        
+        /* Màu sắc phân biệt theo mẫu Huy gửi */
+        .header-cell { background-color: #f2f2f2; font-size: 16px; }
+        .cell-sang { background-color: #ffff00 !important; } /* Vàng rực */
+        .cell-chieu { background-color: #00b0f0 !important; } /* Xanh lơ */
+        .mon-hoc { font-weight: normal; font-size: 14px; min-width: 140px; height: 50px; vertical-align: middle; }
+        
+        #save-btn { margin-top: 25px; padding: 12px 35px; background: #28a745; color: white; border: none; font-size: 16px; font-weight: bold; cursor: pointer; display: none; border-radius: 6px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 style="color: #d32f2f;">Hệ Thống Tách TKB - THPT Lý Nhân</h2>
+    <div class="upload-box" onclick="document.getElementById('fileIn').click()">
+        <b>📁 Nhấp để chọn file: 2026.04.29.-TKB-HKII...</b>
+        <input type="file" id="fileIn" hidden accept=".xlsx">
+    </div>
+    <div id="status">Vui lòng chọn file Excel gốc</div>
+    <div class="list-lop" id="lopGroup"></div>
+
+    <div id="preview" style="display:none">
+        <div id="photo-zone">
+            <div class="main-title">THỜI KHÓA BIỂU</div>
+            <div class="sub-title" id="info-lop">Lớp: ... | Học kỳ II (2025 - 2026)</div>
+            
+            <table class="mau-tkb">
+                <thead>
+                    <tr id="row-header">
+                        <th class="header-cell">Buổi</th>
+                        <th class="header-cell">Tiết</th>
+                        <!-- Thứ (Ngày/Tháng) tự động nạp -->
+                    </tr>
+                </thead>
+                <tbody id="body-content"></tbody>
+            </table>
+        </div>
+        <br>
+        <button id="save-btn">📸 Tải Ảnh TKB Có Màu</button>
+    </div>
+</div>
+
+<script>
+    let excelData = [];
+    let dslop = [];
+
+    document.getElementById('fileIn').onchange = function(e) {
+        const r = new FileReader();
+        r.onload = (ev) => {
+            const d = new Uint8Array(ev.target.result);
+            const wb = XLSX.read(d, {type: 'array'});
+            const ws = wb.Sheets['TKB'];
+            const j = XLSX.utils.sheet_to_json(ws, {header: 1});
+            
+            dslop = [];
+            j[2].forEach((v, i) => {
+                if(i > 2 && v) dslop.push({ n: v, c: i });
+            });
+
+            excelData = j.slice(3);
+            taoNutLop();
+            document.getElementById('status').innerText = "✅ Đã nạp " + dslop.length + " lớp. Chọn lớp để xem!";
+        };
+        r.readAsArrayBuffer(e.target.files[0]);
+    };
+
+    function taoNutLop() {
+        const c = document.getElementById('lopGroup');
+        c.innerHTML = '';
+        dslop.forEach(l => {
+            const b = document.createElement('button');
+            b.className = 'btn-lop';
+            b.innerText = l.n;
+            b.onclick = () => veTkb(l);
+            c.appendChild(b);
+        });
+    }
+
+    function veTkb(l) {
+        document.getElementById('preview').style.display = 'block';
+        document.getElementById('save-btn').style.display = 'inline-block';
+        document.getElementById('info-lop').innerText = `Lớp: ${l.n} | Năm học: 2025 - 2026`;
+
+        let map = {}; 
+        let currentDayLabel = "";
+        let currentSess = "";
+        let listDays = [];
+
+        excelData.forEach(row => {
+            if (row[0]) {
+                let raw = row[0].toString();
+                let thu = raw.split(' ')[0] + " " + (raw.split(' ')[1] || "");
+                let ngay = raw.match(/\d+\/\d+/); 
+                currentDayLabel = ngay ? `${thu} (${ngay[0]})` : thu;
+                if (!listDays.includes(currentDayLabel)) listDays.push(currentDayLabel);
+            }
+            if (row[1]) currentSess = row[1].toString().includes("Sáng") ? "Sáng" : "Chiều";
+            
+            let tiet = row[2];
+            let mon = row[l.c];
+
+            if (!map[currentDayLabel]) map[currentDayLabel] = { "Sáng": {}, "Chiều": {} };
+            if (mon) map[currentDayLabel][currentSess][tiet] = mon;
+        });
+
+        const hr = document.getElementById('row-header');
+        hr.innerHTML = '<th class="header-cell">Buổi</th><th class="header-cell">Tiết</th>';
+        listDays.forEach(d => { hr.innerHTML += `<th class="header-cell">${d}</th>`; });
+
+        const tb = document.getElementById('body-content');
+        tb.innerHTML = '';
+
+        ["Sáng", "Chiều"].forEach(b => {
+            const mauLop = (b === "Sáng") ? "cell-sang" : "cell-chieu";
+            for (let t = 1; t <= 5; t++) {
+                let tr = document.createElement('tr');
+                if (t === 1) {
+                    tr.innerHTML += `<td rowspan="5" class="${mauLop}" style="font-size:22px">${b}</td>`;
+                }
+                tr.innerHTML += `<td class="${mauLop}">${t}</td>`;
+                
+                listDays.forEach(d => {
+                    let subject = map[d][b][t] || "";
+                    tr.innerHTML += `<td class="mon-hoc ${mauLop}">${subject}</td>`;
+                });
+                tb.appendChild(tr);
+            }
+        });
+
+        document.getElementById('save-btn').onclick = () => {
+            html2canvas(document.getElementById('photo-zone'), { scale: 3 }).then(canvas => {
+                let a = document.createElement('a');
+                a.download = `TKB_Mau_Anh_${l.n}.png`;
+                a.href = canvas.toDataURL();
+                a.click();
+            });
+        };
+    }
+</script>
+
+</body>
+</html>
